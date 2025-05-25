@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>「安価安心で食べたいから政権もいただきます」チラシ配布状況</title>
+  <title>「安価安心で食べたいから政権もいただきます」チラシ配布状況（選挙区別）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -120,7 +120,7 @@
 <body>
   <!-- タイトル -->
   <div class="title">
-    「安価安心で食べたいから政権もいただきます」<br>チラシ配布状況
+    「安価安心で食べたいから政権もいただきます」<br>チラシ配布状況（選挙区別）
   </div>
 
   <!-- UI パネル（ステータス表示） -->
@@ -155,7 +155,9 @@
     
     L.control.zoom({ position: "bottomleft" }).addTo(map);
 
-    /** TopoJSON （福岡のみ） */
+    /** TopoJSON （福岡県選挙区データ） */
+    // 注意: 現在は市町村単位のTopoJSONを使用していますが、
+    // 実際の選挙区境界データが必要な場合は、総務省の選挙区データを使用することをお勧めします
     const topoUrl = "https://geoshape.ex.nii.ac.jp/city/topojson/20230101/40/40_city_dc.l.topojson";
     let geoLayer = null;
 
@@ -223,68 +225,19 @@
       });
     }
 
-    /** 埋め込みCSVデータ */
+    /** 埋め込みCSVデータ（衆議院選挙区単位） */
     const embeddedCSVData = [
-      { district: "福岡市", distributed: true },
-      { district: "北九州市", distributed: false },
-      { district: "久留米市", distributed: false },
-      { district: "直方市", distributed: false },
-      { district: "飯塚市", distributed: false },
-      { district: "田川市", distributed: false },
-      { district: "柳川市", distributed: false },
-      { district: "八女市", distributed: false },
-      { district: "筑後市", distributed: false },
-      { district: "大川市", distributed: false },
-      { district: "行橋市", distributed: false },
-      { district: "豊前市", distributed: false },
-      { district: "中間市", distributed: false },
-      { district: "小郡市", distributed: false },
-      { district: "筑紫野市", distributed: false },
-      { district: "春日市", distributed: false },
-      { district: "大野城市", distributed: false },
-      { district: "宗像市", distributed: false },
-      { district: "太宰府市", distributed: false },
-      { district: "古賀市", distributed: false },
-      { district: "福津市", distributed: false },
-      { district: "うきは市", distributed: false },
-      { district: "宮若市", distributed: false },
-      { district: "嘉麻市", distributed: false },
-      { district: "朝倉市", distributed: false },
-      { district: "みやま市", distributed: false },
-      { district: "糸島市", distributed: false },
-      { district: "那珂川市", distributed: false },
-      { district: "宇美町", distributed: false },
-      { district: "篠栗町", distributed: false },
-      { district: "志免町", distributed: false },
-      { district: "須恵町", distributed: false },
-      { district: "新宮町", distributed: false },
-      { district: "久山町", distributed: false },
-      { district: "粕屋町", distributed: false },
-      { district: "芦屋町", distributed: false },
-      { district: "水巻町", distributed: false },
-      { district: "岡垣町", distributed: false },
-      { district: "遠賀町", distributed: false },
-      { district: "小竹町", distributed: false },
-      { district: "鞍手町", distributed: false },
-      { district: "桂川町", distributed: false },
-      { district: "筑前町", distributed: false },
-      { district: "東峰村", distributed: false },
-      { district: "大刀洗町", distributed: false },
-      { district: "大木町", distributed: false },
-      { district: "広川町", distributed: false },
-      { district: "香春町", distributed: false },
-      { district: "添田町", distributed: false },
-      { district: "糸田町", distributed: false },
-      { district: "川崎町", distributed: false },
-      { district: "大任町", distributed: false },
-      { district: "赤村", distributed: false },
-      { district: "福智町", distributed: false },
-      { district: "苅田町", distributed: false },
-      { district: "みやこ町", distributed: false },
-      { district: "吉富町", distributed: false },
-      { district: "上毛町", distributed: false },
-      { district: "築上町", distributed: false },
-      { district: "大牟田市", distributed: false }
+      { district: "福岡1区", status: "completed" },  // 福岡市東区、博多区（配布済み）
+      { district: "福岡2区", status: "none" },      // 福岡市中央区、南区、城南区
+      { district: "福岡3区", status: "planned" },  // 福岡市早良区、西区、糸島市（配布済み：早良区）
+      { district: "福岡4区", status: "none" },    // 宗像市、古賀市、福津市、糟屋郡
+      { district: "福岡5区", status: "none" },    // 筑紫野市、春日市、大野城市など
+      { district: "福岡6区", status: "none" },      // 久留米市、大川市、小郡市など
+      { district: "福岡7区", status: "none" },      // 大牟田市、柳川市、八女市など
+      { district: "福岡8区", status: "none" },      // 直方市、飯塚市、中間市など
+      { district: "福岡9区", status: "none" },    // 北九州市若松区、八幡東区、八幡西区、戸畑区
+      { district: "福岡10区", status: "none" },     // 北九州市門司区、小倉北区、小倉南区
+      { district: "福岡11区", status: "none" }      // 田川市、行橋市、豊前市など
     ];
 
     /** データ読み込み */
@@ -313,46 +266,85 @@
     /** CSV 取り込み（手動アップロード用・予備） */
     let pendingCsvData = null;
 
-    /** CSV → マップ塗り (Bool値対応) */
+    /** CSV → マップ塗り (選挙区単位対応) */
     function applyCSV(csvData) {
       if (!geoLayer) return;
+      
+      // 市町村から選挙区へのマッピング
+      const municipalityToDistrict = {
+        // 福岡1区: 福岡市東区、博多区
+        "福岡市": "福岡1区", // 福岡市全体を1区として仮設定（実際は区によって分かれる）
+        // 福岡2区: 福岡市中央区、南区、城南区
+        // 福岡3区: 福岡市早良区、西区、糸島市
+        "糸島市": "福岡3区",
+        // 福岡4区: 宗像市、古賀市、福津市、糟屋郡
+        "宗像市": "福岡4区", "古賀市": "福岡4区", "福津市": "福岡4区",
+        "宇美町": "福岡4区", "篠栗町": "福岡4区", "志免町": "福岡4区", 
+        "須恵町": "福岡4区", "新宮町": "福岡4区", "久山町": "福岡4区", "粕屋町": "福岡4区",
+        // 福岡5区: 筑紫野市、春日市、大野城市、太宰府市、朝倉市、那珂川市、筑前町、東峰村
+        "筑紫野市": "福岡5区", "春日市": "福岡5区", "大野城市": "福岡5区", "太宰府市": "福岡5区",
+        "朝倉市": "福岡5区", "那珂川市": "福岡5区", "筑前町": "福岡5区", "東峰村": "福岡5区",
+        // 福岡6区: 久留米市、大川市、小郡市、うきは市、大刀洗町、大木町
+        "久留米市": "福岡6区", "大川市": "福岡6区", "小郡市": "福岡6区", 
+        "うきは市": "福岡6区", "大刀洗町": "福岡6区", "大木町": "福岡6区",
+        // 福岡7区: 大牟田市、柳川市、八女市、筑後市、みやま市、広川町
+        "大牟田市": "福岡7区", "柳川市": "福岡7区", "八女市": "福岡7区", 
+        "筑後市": "福岡7区", "みやま市": "福岡7区", "広川町": "福岡7区",
+        // 福岡8区: 直方市、飯塚市、中間市、宮若市、嘉麻市、芦屋町、水巻町、岡垣町、遠賀町、小竹町、鞍手町、桂川町
+        "直方市": "福岡8区", "飯塚市": "福岡8区", "中間市": "福岡8区", "宮若市": "福岡8区", "嘉麻市": "福岡8区",
+        "芦屋町": "福岡8区", "水巻町": "福岡8区", "岡垣町": "福岡8区", "遠賀町": "福岡8区", 
+        "小竹町": "福岡8区", "鞍手町": "福岡8区", "桂川町": "福岡8区",
+        // 福岡9区: 北九州市若松区、八幡東区、八幡西区、戸畑区
+        "北九州市": "福岡9区", // 北九州市全体を9区として仮設定（実際は区によって分かれる）
+        // 福岡10区: 北九州市門司区、小倉北区、小倉南区
+        // 福岡11区: 田川市、行橋市、豊前市、香春町、添田町、糸田町、川崎町、大任町、赤村、福智町、苅田町、みやこ町、吉富町、上毛町、築上町
+        "田川市": "福岡11区", "行橋市": "福岡11区", "豊前市": "福岡11区", 
+        "香春町": "福岡11区", "添田町": "福岡11区", "糸田町": "福岡11区", "川崎町": "福岡11区", 
+        "大任町": "福岡11区", "赤村": "福岡11区", "福智町": "福岡11区", "苅田町": "福岡11区", 
+        "みやこ町": "福岡11区", "吉富町": "福岡11区", "上毛町": "福岡11区", "築上町": "福岡11区"
+      };
       
       const lookup = {};
       csvData.forEach(r => { 
         if (r.district) {
-          const district = r.district.trim();
-          // Bool値の判定（true, True, 1, "true", "True"など）
-          const isDistributed = r.distributed === true || 
-                               r.distributed === 1 || 
-                               String(r.distributed).toLowerCase() === "true";
-          lookup[district] = isDistributed;
+          lookup[r.district.trim()] = r.status || "none";
         }
       });
 
       geoLayer.eachLayer(l => {
         const props = l.feature.properties;
-        const name = props.name || props.N03_004 || props.N03_003;
-        const isDistributed = lookup[name];
+        const municipalityName = props.name || props.N03_004 || props.N03_003;
+        const districtName = municipalityToDistrict[municipalityName];
+        const status = districtName ? lookup[districtName] : "none";
         
-        if (isDistributed !== undefined) {
-          if (isDistributed) {
-            // 配布済み = 赤色
-            const color = "#ff4757";
-            l.setStyle({ fillColor: color });
-            l.myFillColor = color;
-            l.setTooltipContent(`${name}: <strong>✅ 配布済み</strong>`);
-          } else {
-            // 未配布 = 薄い青色
-            const color = "#a4b0be";
-            l.setStyle({ fillColor: color });
-            l.myFillColor = color;
-            l.setTooltipContent(`${name}: <strong>❌ 未配布</strong>`);
-          }
+        let color, statusText, emoji;
+        
+        switch (status) {
+          case "completed":
+            color = "#ff4757"; // 赤色
+            statusText = "配布済み";
+            emoji = "✅";
+            break;
+          case "planned":
+            color = "#ffa502"; // 黄色（オレンジ寄り）
+            statusText = "配布予定";
+            emoji = "📋";
+            break;
+          case "none":
+          default:
+            color = "#a4b0be"; // 薄い青色
+            statusText = "未配布";
+            emoji = "❌";
+            break;
+        }
+        
+        l.setStyle({ fillColor: color });
+        l.myFillColor = color;
+        
+        if (districtName) {
+          l.setTooltipContent(`${municipalityName}<br><strong>${districtName}: ${emoji} ${statusText}</strong>`);
         } else {
-          // データなし = デフォルト色
-          l.setStyle({ fillColor: "#f8f9fa" });
-          l.myFillColor = "#f8f9fa";
-          l.setTooltipContent(`${name}: データなし`);
+          l.setTooltipContent(`${municipalityName}<br>選挙区データなし`);
         }
       });
     }
@@ -369,10 +361,10 @@
 
     function renderLegend(div) {
       div.innerHTML = `
-        <strong>🗺️ 配布状況</strong><br>
+        <strong>🗳️ 配布状況（選挙区別）</strong><br>
         <i style="background:#ff4757"></i> ✅ 配布済み<br>
+        <i style="background:#ffa502"></i> 📋 配布予定<br>
         <i style="background:#a4b0be"></i> ❌ 未配布<br>
-        <i style="background:#f8f9fa"></i> 📋 データなし<br>
       `;
     }
   </script>
