@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>「安価安心で食べたいから政権もいただきます」チラシ配布状況</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    /* ===== 明るくポップなテーマ ===== */
+    :root {
+      --bg: linear-gradient(135deg, #ff9a9e 0%, #fecfef 50%, #fecfef 100%);
+      --card: rgba(255, 255, 255, 0.95);
+      --accent: #ff6b6b;
+      --fg: #2c3e50;
+      --border: rgba(255, 107, 107, 0.3);
+    }
+
+    html,body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      font-family: "Comic Sans MS", "Hiragino Kaku Gothic ProN", "メイリオ", Meiryo, sans-serif;
+      color: var(--fg);
+      font-weight: 600;
+    }
+    
+    #map { 
+      height: 100%; 
+      width: 100%; 
+      border-radius: 0;
+    }
+
+    /* タイトル */
+    .title {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--card);
+      padding: 15px 25px;
+      border-radius: 25px;
+      box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+      border: 2px solid var(--border);
+      z-index: 1000;
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: var(--accent);
+      text-align: center;
+      backdrop-filter: blur(10px);
+    }
+
+    /* ポリゴンのフェードアニメ */
+    .leaflet-interactive { 
+      transition: fill 0.3s ease, stroke 0.3s ease, fill-opacity 0.3s ease; 
+    }
+
+    /* 凡例カード */
+    .legend {
+      background: var(--card);
+      line-height: 1.6em;
+      padding: 15px 20px;
+      font-size: 1rem;
+      border-radius: 20px;
+      box-shadow: 0 4px 20px rgba(255, 107, 107, 0.25);
+      border: 2px solid var(--border);
+      backdrop-filter: blur(10px);
+    }
+    .legend i {
+      width: 20px; 
+      height: 20px; 
+      float: left; 
+      margin-right: 10px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 107, 107, 0.4);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    
+    /* CSV ボタン */
+    .ui-btn {
+      background: var(--card);
+      color: var(--fg);
+      border: 2px solid var(--border);
+      border-radius: 15px;
+      padding: 10px 15px;
+      font-size: 1rem;
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+      font-weight: bold;
+      box-shadow: 0 3px 10px rgba(255, 107, 107, 0.2);
+      transition: all 0.3s ease;
+    }
+    
+    .ui-btn:hover {
+      background: var(--accent);
+      color: white;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+    }
+    
+    .ui-container { 
+      position: absolute; 
+      top: 10px; 
+      left: 10px; 
+      z-index: 1000; 
+      display: flex; 
+      align-items: center; 
+    }
+
+    /* ツールチップのスタイル */
+    .leaflet-tooltip {
+      background: var(--card) !important;
+      border: 2px solid var(--border) !important;
+      border-radius: 10px !important;
+      color: var(--fg) !important;
+      font-weight: bold !important;
+      box-shadow: 0 3px 10px rgba(255, 107, 107, 0.3) !important;
+    }
+  </style>
+</head>
+<body>
+  <!-- タイトル -->
+  <div class="title">
+    「安価安心で食べたいから政権もいただきます」<br>チラシ配布状況
+  </div>
+
+  <!-- UI パネル（ステータス表示） -->
+  <div class="ui-container">
+    <div class="ui-btn" style="background: rgba(255, 107, 107, 0.1); cursor: default;">
+      📊 配布データを読み込み中...
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <!-- ライブラリ -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/d3@7"></script>
+  <script src="https://unpkg.com/topojson-client@3"></script>
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <script>
+    /** =============================================
+     *  Leaflet マップ初期化
+     * =========================================== */
+    const lightLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      attribution: "&copy; OpenStreetMap contributors, &copy; CARTO",
+    });
+
+    const map = L.map("map", {
+      zoomSnap: 0.25,
+      inertia: true,
+      zoomControl: false,
+      layers: [lightLayer],
+    }).setView([33.58, 130.58], 8.5);
+    
+    L.control.zoom({ position: "bottomleft" }).addTo(map);
+
+    /** TopoJSON （福岡のみ） */
+    const topoUrl = "https://geoshape.ex.nii.ac.jp/city/topojson/20230101/40/40_city_dc.l.topojson";
+    let geoLayer = null;
+
+    fetch(topoUrl)
+      .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
+      .then(topology => {
+        const objKey = Object.keys(topology.objects).find(k => topology.objects[k].type === "GeometryCollection");
+        const geo = topojson.feature(topology, topology.objects[objKey]);
+
+        geoLayer = L.geoJSON(geo, {
+          style: baseStyle,
+          onEachFeature: onEachDistrict,
+        }).addTo(map);
+
+        const bounds = geoLayer.getBounds();
+        map.fitBounds(bounds);
+        map.setMaxBounds(bounds.pad(0.4));
+
+        // 配布データ自動読み込みを実行
+        loadDistributionData();
+        
+        if (pendingCsvData) applyCSV(pendingCsvData);
+      })
+      .catch(e => console.error("TopoJSON load error", e));
+
+    /** 基本スタイル関数 */
+    function baseStyle() {
+      return {
+        weight: 2,
+        color: "#ff6b6b",
+        fillOpacity: 0.7,
+        fillColor: "#f8f9fa", // CSV 読込前のデフォルト（薄いグレー）
+      };
+    }
+
+    /** 各ポリゴンのイベント設定 */
+    function onEachDistrict(feature, layer) {
+      const label = feature.properties.name || feature.properties.N03_004 || feature.properties.N03_003;
+      layer.bindTooltip(label, { 
+        sticky: true, 
+        direction: "auto",
+        className: "custom-tooltip"
+      });
+
+      layer.on({
+        mouseover: (e) => {
+          const t = e.target;
+          t.setStyle({
+            weight: 4,
+            color: "#ff4757",
+            fillOpacity: 0.9,
+            fillColor: t.myFillColor || t.options.fillColor,
+          });
+          if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) t.bringToFront();
+        },
+        mouseout: (e) => {
+          const t = e.target;
+          t.setStyle({
+            weight: 2,
+            color: "#ff6b6b",
+            fillOpacity: 0.7,
+            fillColor: t.myFillColor || t.options.fillColor,
+          });
+        },
+      });
+    }
+
+    /** 埋め込みCSVデータ */
+    const embeddedCSVData = [
+      { district: "福岡市", distributed: true },
+      { district: "北九州市", distributed: false },
+      { district: "久留米市", distributed: false },
+      { district: "直方市", distributed: false },
+      { district: "飯塚市", distributed: false },
+      { district: "田川市", distributed: false },
+      { district: "柳川市", distributed: false },
+      { district: "八女市", distributed: false },
+      { district: "筑後市", distributed: false },
+      { district: "大川市", distributed: false },
+      { district: "行橋市", distributed: false },
+      { district: "豊前市", distributed: false },
+      { district: "中間市", distributed: false },
+      { district: "小郡市", distributed: false },
+      { district: "筑紫野市", distributed: false },
+      { district: "春日市", distributed: false },
+      { district: "大野城市", distributed: false },
+      { district: "宗像市", distributed: false },
+      { district: "太宰府市", distributed: false },
+      { district: "古賀市", distributed: false },
+      { district: "福津市", distributed: false },
+      { district: "うきは市", distributed: false },
+      { district: "宮若市", distributed: false },
+      { district: "嘉麻市", distributed: false },
+      { district: "朝倉市", distributed: false },
+      { district: "みやま市", distributed: false },
+      { district: "糸島市", distributed: false },
+      { district: "那珂川市", distributed: false },
+      { district: "宇美町", distributed: false },
+      { district: "篠栗町", distributed: false },
+      { district: "志免町", distributed: false },
+      { district: "須恵町", distributed: false },
+      { district: "新宮町", distributed: false },
+      { district: "久山町", distributed: false },
+      { district: "粕屋町", distributed: false },
+      { district: "芦屋町", distributed: false },
+      { district: "水巻町", distributed: false },
+      { district: "岡垣町", distributed: false },
+      { district: "遠賀町", distributed: false },
+      { district: "小竹町", distributed: false },
+      { district: "鞍手町", distributed: false },
+      { district: "桂川町", distributed: false },
+      { district: "筑前町", distributed: false },
+      { district: "東峰村", distributed: false },
+      { district: "大刀洗町", distributed: false },
+      { district: "大木町", distributed: false },
+      { district: "広川町", distributed: false },
+      { district: "香春町", distributed: false },
+      { district: "添田町", distributed: false },
+      { district: "糸田町", distributed: false },
+      { district: "川崎町", distributed: false },
+      { district: "大任町", distributed: false },
+      { district: "赤村", distributed: false },
+      { district: "福智町", distributed: false },
+      { district: "苅田町", distributed: false },
+      { district: "みやこ町", distributed: false },
+      { district: "吉富町", distributed: false },
+      { district: "上毛町", distributed: false },
+      { district: "築上町", distributed: false },
+      { district: "大牟田市", distributed: false }
+    ];
+
+    /** データ読み込み */
+    function loadDistributionData() {
+      try {
+        pendingCsvData = embeddedCSVData;
+        applyCSV(pendingCsvData);
+        
+        // 読み込み完了の表示更新
+        const statusElement = document.querySelector('.ui-container .ui-btn');
+        if (statusElement) {
+          statusElement.innerHTML = '✅ 配布データ読み込み完了';
+          statusElement.style.background = 'rgba(76, 175, 80, 0.2)';
+        }
+      } catch (error) {
+        console.error('データ読み込みエラー:', error);
+        // エラー時の表示更新
+        const statusElement = document.querySelector('.ui-container .ui-btn');
+        if (statusElement) {
+          statusElement.innerHTML = '❌ データ読み込みエラー';
+          statusElement.style.background = 'rgba(244, 67, 54, 0.2)';
+        }
+      }
+    }
+
+    /** CSV 取り込み（手動アップロード用・予備） */
+    let pendingCsvData = null;
+
+    /** CSV → マップ塗り (Bool値対応) */
+    function applyCSV(csvData) {
+      if (!geoLayer) return;
+      
+      const lookup = {};
+      csvData.forEach(r => { 
+        if (r.district) {
+          const district = r.district.trim();
+          // Bool値の判定（true, True, 1, "true", "True"など）
+          const isDistributed = r.distributed === true || 
+                               r.distributed === 1 || 
+                               String(r.distributed).toLowerCase() === "true";
+          lookup[district] = isDistributed;
+        }
+      });
+
+      geoLayer.eachLayer(l => {
+        const props = l.feature.properties;
+        const name = props.name || props.N03_004 || props.N03_003;
+        const isDistributed = lookup[name];
+        
+        if (isDistributed !== undefined) {
+          if (isDistributed) {
+            // 配布済み = 赤色
+            const color = "#ff4757";
+            l.setStyle({ fillColor: color });
+            l.myFillColor = color;
+            l.setTooltipContent(`${name}: <strong>✅ 配布済み</strong>`);
+          } else {
+            // 未配布 = 薄い青色
+            const color = "#a4b0be";
+            l.setStyle({ fillColor: color });
+            l.myFillColor = color;
+            l.setTooltipContent(`${name}: <strong>❌ 未配布</strong>`);
+          }
+        } else {
+          // データなし = デフォルト色
+          l.setStyle({ fillColor: "#f8f9fa" });
+          l.myFillColor = "#f8f9fa";
+          l.setTooltipContent(`${name}: データなし`);
+        }
+      });
+    }
+
+    /** 凡例 */
+    const legend = L.control({ position: "bottomright" });
+    legend.onAdd = () => {
+      const div = L.DomUtil.create("div", "legend");
+      div.id = "legendBox";
+      renderLegend(div);
+      return div;
+    };
+    legend.addTo(map);
+
+    function renderLegend(div) {
+      div.innerHTML = `
+        <strong>🗺️ 配布状況</strong><br>
+        <i style="background:#ff4757"></i> ✅ 配布済み<br>
+        <i style="background:#a4b0be"></i> ❌ 未配布<br>
+        <i style="background:#f8f9fa"></i> 📋 データなし<br>
+      `;
+    }
+  </script>
+</body>
+</html>
