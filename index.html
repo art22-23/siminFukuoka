@@ -1,372 +1,92 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8" />
-  <title>「安価安心で食べたいから政権もいただきます」チラシ配布状況（選挙区別）</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <style>
-    /* ===== 明るくポップなテーマ ===== */
-    :root {
-      --bg: linear-gradient(135deg, #ff9a9e 0%, #fecfef 50%, #fecfef 100%);
-      --card: rgba(255, 255, 255, 0.95);
-      --accent: #ff6b6b;
-      --fg: #2c3e50;
-      --border: rgba(255, 107, 107, 0.3);
-    }
+<!DOCTYPE html><html lang="ja"><head>
+<meta charset="utf-8" />
+<title>福岡 衆院小選挙区 チラシ配布状況</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+/* —— 省略可：配色だけ調整 —— */
+:root{--bg:linear-gradient(135deg,#ff9a9e 0%,#fecfef 50%,#fecfef 100%);
+--card:rgba(255,255,255,.95);--accent:#ff6b6b;--fg:#2c3e50;--border:rgba(255,107,107,.3)}
+html,body{margin:0;height:100%;background:var(--bg);font-family:"Comic Sans MS","メイリオ",sans-serif;color:var(--fg);font-weight:600}
+#map{height:100%;width:100%}.title{position:absolute;top:10px;left:50%;transform:translateX(-50%);
+background:var(--card);padding:12px 24px;border-radius:24px;border:2px solid var(--border);
+box-shadow:0 4px 15px rgba(255,107,107,.3);color:var(--accent);z-index:1000;font-size:1.15rem;
+backdrop-filter:blur(10px);text-align:center}
+.legend{background:var(--card);line-height:1.6em;padding:12px 18px;font-size:1rem;border-radius:18px;
+border:2px solid var(--border);box-shadow:0 4px 18px rgba(255,107,107,.25);backdrop-filter:blur(10px)}
+.legend i{width:18px;height:18px;float:left;margin-right:8px;border-radius:50%;border:2px solid rgba(255,107,107,.4)}
+.leaflet-tooltip{background:var(--card)!important;border:2px solid var(--border)!important;border-radius:10px!important;
+color:var(--fg)!important;font-weight:bold!important;box-shadow:0 3px 10px rgba(255,107,107,.3)!important}
+</style></head><body>
+<div class="title">「安価安心で食べたいから政権もいただきます」<br>チラシ配布状況（福岡 11 選挙区）</div>
+<div id="map"></div>
 
-    html,body {
-      margin: 0;
-      height: 100%;
-      background: var(--bg);
-      font-family: "Comic Sans MS", "Hiragino Kaku Gothic ProN", "メイリオ", Meiryo, sans-serif;
-      color: var(--fg);
-      font-weight: 600;
-    }
-    
-    #map { 
-      height: 100%; 
-      width: 100%; 
-      border-radius: 0;
-    }
+<!-- Leaflet & shpjs -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/shpjs/6.1.0/shp.min.js"></script>
 
-    /* タイトル */
-    .title {
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: var(--card);
-      padding: 15px 25px;
-      border-radius: 25px;
-      box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
-      border: 2px solid var(--border);
-      z-index: 1000;
-      font-size: 1.2rem;
-      font-weight: bold;
-      color: var(--accent);
-      text-align: center;
-      backdrop-filter: blur(10px);
-    }
+<script>
+/* ===== 1. Leaflet 初期化 ===== */
+const map = L.map("map",{zoomSnap:.25,zoomControl:false})
+  .setView([33.58,130.58],8.6);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+  {attribution:"&copy;OpenStreetMap &amp; CARTO"}).addTo(map);
+L.control.zoom({position:"bottomleft"}).addTo(map);
 
-    /* ポリゴンのフェードアニメ */
-    .leaflet-interactive { 
-      transition: fill 0.3s ease, stroke 0.3s ease, fill-opacity 0.3s ease; 
-    }
+/* ===== 2. 配布状況テーブル ===== */
+const districtStatus = {
+  "福岡1区":"completed",
+  "福岡2区":"none",
+  "福岡3区":"planned",
+  "福岡4区":"none",
+  "福岡5区":"none",
+  "福岡6区":"none",
+  "福岡7区":"none",
+  "福岡8区":"none",
+  "福岡9区":"none",
+  "福岡10区":"none",
+  "福岡11区":"none"
+};
 
-    /* 凡例カード */
-    .legend {
-      background: var(--card);
-      line-height: 1.6em;
-      padding: 15px 20px;
-      font-size: 1rem;
-      border-radius: 20px;
-      box-shadow: 0 4px 20px rgba(255, 107, 107, 0.25);
-      border: 2px solid var(--border);
-      backdrop-filter: blur(10px);
-    }
-    .legend i {
-      width: 20px; 
-      height: 20px; 
-      float: left; 
-      margin-right: 10px;
-      border-radius: 50%;
-      border: 2px solid rgba(255, 107, 107, 0.4);
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-    
-    /* CSV ボタン */
-    .ui-btn {
-      background: var(--card);
-      color: var(--fg);
-      border: 2px solid var(--border);
-      border-radius: 15px;
-      padding: 10px 15px;
-      font-size: 1rem;
-      cursor: pointer;
-      backdrop-filter: blur(10px);
-      font-weight: bold;
-      box-shadow: 0 3px 10px rgba(255, 107, 107, 0.2);
-      transition: all 0.3s ease;
-    }
-    
-    .ui-btn:hover {
-      background: var(--accent);
-      color: white;
-      transform: translateY(-2px);
-      box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
-    }
-    
-    .ui-container { 
-      position: absolute; 
-      top: 10px; 
-      left: 10px; 
-      z-index: 1000; 
-      display: flex; 
-      align-items: center; 
-    }
+/* ===== 3. Shapefile → GeoJSON 読込 ===== */
+const shpUrl = "https://gtfs-gis.jp/senkyoku/byku/senkyoku289polygon_byku_40.zip"; // 福岡県のみ
+shp(shpUrl).then(fc=>{
+  const layer = L.geoJSON(fc,{
+    style:f=>styleByStatus(f),
+    onEachFeature:(f,l)=>tooltipAndHover(f,l)
+  }).addTo(map);
+  map.fitBounds(layer.getBounds());
+});
 
-    /* ツールチップのスタイル */
-    .leaflet-tooltip {
-      background: var(--card) !important;
-      border: 2px solid var(--border) !important;
-      border-radius: 10px !important;
-      color: var(--fg) !important;
-      font-weight: bold !important;
-      box-shadow: 0 3px 10px rgba(255, 107, 107, 0.3) !important;
-    }
-  </style>
-</head>
-<body>
-  <!-- タイトル -->
-  <div class="title">
-    「安価安心で食べたいから政権もいただきます」<br>チラシ配布状況（選挙区別）
-  </div>
+/* ===== 4. スタイル関数 ===== */
+function styleByStatus(feature){
+  const name = feature.properties.KU || feature.properties.NAME || ""; // 属性名は環境により異なる
+  const status = districtStatus[name]||"none";
+  const colors = {completed:"#ff4757",planned:"#ffa502",none:"#a4b0be"};
+  return {weight:2,color:"#ff6b6b",fillOpacity:.75,fillColor:colors[status]};
+}
 
-  <!-- UI パネル（ステータス表示） -->
-  <div class="ui-container">
-    <div class="ui-btn" style="background: rgba(255, 107, 107, 0.1); cursor: default;">
-      📊 配布データを読み込み中...
-    </div>
-  </div>
+/* ===== 5. Tooltip & Hover ===== */
+function tooltipAndHover(feature,layer){
+  const name = feature.properties.KU || feature.properties.NAME || "";
+  const st = districtStatus[name]||"none";
+  const label = {completed:"✅ 配布済み",planned:"📋 配布予定",none:"❌ 未配布"}[st];
+  layer.bindTooltip(`${name}<br><strong>${label}</strong>`,{sticky:true});
+  layer.on({
+    mouseover:e=>e.target.setStyle({weight:4,color:"#ff4757",fillOpacity:.9}),
+    mouseout:e=>e.target.setStyle({weight:2,color:"#ff6b6b",fillOpacity:.75})
+  });
+}
 
-  <div id="map"></div>
-
-  <!-- ライブラリ -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/d3@7"></script>
-  <script src="https://unpkg.com/topojson-client@3"></script>
-  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
-
-  <script>
-    /** =============================================
-     *  Leaflet マップ初期化
-     * =========================================== */
-    const lightLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-      attribution: "&copy; OpenStreetMap contributors, &copy; CARTO",
-    });
-
-    const map = L.map("map", {
-      zoomSnap: 0.25,
-      inertia: true,
-      zoomControl: false,
-      layers: [lightLayer],
-    }).setView([33.58, 130.58], 8.5);
-    
-    L.control.zoom({ position: "bottomleft" }).addTo(map);
-
-    /** TopoJSON （福岡県選挙区データ） */
-    // 注意: 現在は市町村単位のTopoJSONを使用していますが、
-    // 実際の選挙区境界データが必要な場合は、総務省の選挙区データを使用することをお勧めします
-    const topoUrl = "https://geoshape.ex.nii.ac.jp/city/topojson/20230101/40/40_city_dc.l.topojson";
-    let geoLayer = null;
-
-    fetch(topoUrl)
-      .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
-      .then(topology => {
-        const objKey = Object.keys(topology.objects).find(k => topology.objects[k].type === "GeometryCollection");
-        const geo = topojson.feature(topology, topology.objects[objKey]);
-
-        geoLayer = L.geoJSON(geo, {
-          style: baseStyle,
-          onEachFeature: onEachDistrict,
-        }).addTo(map);
-
-        const bounds = geoLayer.getBounds();
-        map.fitBounds(bounds);
-        map.setMaxBounds(bounds.pad(0.4));
-
-        // 配布データ自動読み込みを実行
-        loadDistributionData();
-        
-        if (pendingCsvData) applyCSV(pendingCsvData);
-      })
-      .catch(e => console.error("TopoJSON load error", e));
-
-    /** 基本スタイル関数 */
-    function baseStyle() {
-      return {
-        weight: 2,
-        color: "#ff6b6b",
-        fillOpacity: 0.7,
-        fillColor: "#f8f9fa", // CSV 読込前のデフォルト（薄いグレー）
-      };
-    }
-
-    /** 各ポリゴンのイベント設定 */
-    function onEachDistrict(feature, layer) {
-      const label = feature.properties.name || feature.properties.N03_004 || feature.properties.N03_003;
-      layer.bindTooltip(label, { 
-        sticky: true, 
-        direction: "auto",
-        className: "custom-tooltip"
-      });
-
-      layer.on({
-        mouseover: (e) => {
-          const t = e.target;
-          t.setStyle({
-            weight: 4,
-            color: "#ff4757",
-            fillOpacity: 0.9,
-            fillColor: t.myFillColor || t.options.fillColor,
-          });
-          if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) t.bringToFront();
-        },
-        mouseout: (e) => {
-          const t = e.target;
-          t.setStyle({
-            weight: 2,
-            color: "#ff6b6b",
-            fillOpacity: 0.7,
-            fillColor: t.myFillColor || t.options.fillColor,
-          });
-        },
-      });
-    }
-
-    /** 埋め込みCSVデータ（衆議院選挙区単位） */
-    const embeddedCSVData = [
-      { district: "福岡1区", status: "completed" },  // 福岡市東区、博多区（配布済み）
-      { district: "福岡2区", status: "none" },      // 福岡市中央区、南区、城南区
-      { district: "福岡3区", status: "planned" },  // 福岡市早良区、西区、糸島市（配布済み：早良区）
-      { district: "福岡4区", status: "none" },    // 宗像市、古賀市、福津市、糟屋郡
-      { district: "福岡5区", status: "none" },    // 筑紫野市、春日市、大野城市など
-      { district: "福岡6区", status: "none" },      // 久留米市、大川市、小郡市など
-      { district: "福岡7区", status: "none" },      // 大牟田市、柳川市、八女市など
-      { district: "福岡8区", status: "none" },      // 直方市、飯塚市、中間市など
-      { district: "福岡9区", status: "none" },    // 北九州市若松区、八幡東区、八幡西区、戸畑区
-      { district: "福岡10区", status: "none" },     // 北九州市門司区、小倉北区、小倉南区
-      { district: "福岡11区", status: "none" }      // 田川市、行橋市、豊前市など
-    ];
-
-    /** データ読み込み */
-    function loadDistributionData() {
-      try {
-        pendingCsvData = embeddedCSVData;
-        applyCSV(pendingCsvData);
-        
-        // 読み込み完了の表示更新
-        const statusElement = document.querySelector('.ui-container .ui-btn');
-        if (statusElement) {
-          statusElement.innerHTML = '✅ 配布データ読み込み完了';
-          statusElement.style.background = 'rgba(76, 175, 80, 0.2)';
-        }
-      } catch (error) {
-        console.error('データ読み込みエラー:', error);
-        // エラー時の表示更新
-        const statusElement = document.querySelector('.ui-container .ui-btn');
-        if (statusElement) {
-          statusElement.innerHTML = '❌ データ読み込みエラー';
-          statusElement.style.background = 'rgba(244, 67, 54, 0.2)';
-        }
-      }
-    }
-
-    /** CSV 取り込み（手動アップロード用・予備） */
-    let pendingCsvData = null;
-
-    /** CSV → マップ塗り (選挙区単位対応) */
-    function applyCSV(csvData) {
-      if (!geoLayer) return;
-      
-      // 市町村から選挙区へのマッピング
-      const municipalityToDistrict = {
-        // 福岡1区: 福岡市東区、博多区
-        "福岡市": "福岡1区", // 福岡市全体を1区として仮設定（実際は区によって分かれる）
-        // 福岡2区: 福岡市中央区、南区、城南区
-        // 福岡3区: 福岡市早良区、西区、糸島市
-        "糸島市": "福岡3区",
-        // 福岡4区: 宗像市、古賀市、福津市、糟屋郡
-        "宗像市": "福岡4区", "古賀市": "福岡4区", "福津市": "福岡4区",
-        "宇美町": "福岡4区", "篠栗町": "福岡4区", "志免町": "福岡4区", 
-        "須恵町": "福岡4区", "新宮町": "福岡4区", "久山町": "福岡4区", "粕屋町": "福岡4区",
-        // 福岡5区: 筑紫野市、春日市、大野城市、太宰府市、朝倉市、那珂川市、筑前町、東峰村
-        "筑紫野市": "福岡5区", "春日市": "福岡5区", "大野城市": "福岡5区", "太宰府市": "福岡5区",
-        "朝倉市": "福岡5区", "那珂川市": "福岡5区", "筑前町": "福岡5区", "東峰村": "福岡5区",
-        // 福岡6区: 久留米市、大川市、小郡市、うきは市、大刀洗町、大木町
-        "久留米市": "福岡6区", "大川市": "福岡6区", "小郡市": "福岡6区", 
-        "うきは市": "福岡6区", "大刀洗町": "福岡6区", "大木町": "福岡6区",
-        // 福岡7区: 大牟田市、柳川市、八女市、筑後市、みやま市、広川町
-        "大牟田市": "福岡7区", "柳川市": "福岡7区", "八女市": "福岡7区", 
-        "筑後市": "福岡7区", "みやま市": "福岡7区", "広川町": "福岡7区",
-        // 福岡8区: 直方市、飯塚市、中間市、宮若市、嘉麻市、芦屋町、水巻町、岡垣町、遠賀町、小竹町、鞍手町、桂川町
-        "直方市": "福岡8区", "飯塚市": "福岡8区", "中間市": "福岡8区", "宮若市": "福岡8区", "嘉麻市": "福岡8区",
-        "芦屋町": "福岡8区", "水巻町": "福岡8区", "岡垣町": "福岡8区", "遠賀町": "福岡8区", 
-        "小竹町": "福岡8区", "鞍手町": "福岡8区", "桂川町": "福岡8区",
-        // 福岡9区: 北九州市若松区、八幡東区、八幡西区、戸畑区
-        "北九州市": "福岡9区", // 北九州市全体を9区として仮設定（実際は区によって分かれる）
-        // 福岡10区: 北九州市門司区、小倉北区、小倉南区
-        // 福岡11区: 田川市、行橋市、豊前市、香春町、添田町、糸田町、川崎町、大任町、赤村、福智町、苅田町、みやこ町、吉富町、上毛町、築上町
-        "田川市": "福岡11区", "行橋市": "福岡11区", "豊前市": "福岡11区", 
-        "香春町": "福岡11区", "添田町": "福岡11区", "糸田町": "福岡11区", "川崎町": "福岡11区", 
-        "大任町": "福岡11区", "赤村": "福岡11区", "福智町": "福岡11区", "苅田町": "福岡11区", 
-        "みやこ町": "福岡11区", "吉富町": "福岡11区", "上毛町": "福岡11区", "築上町": "福岡11区"
-      };
-      
-      const lookup = {};
-      csvData.forEach(r => { 
-        if (r.district) {
-          lookup[r.district.trim()] = r.status || "none";
-        }
-      });
-
-      geoLayer.eachLayer(l => {
-        const props = l.feature.properties;
-        const municipalityName = props.name || props.N03_004 || props.N03_003;
-        const districtName = municipalityToDistrict[municipalityName];
-        const status = districtName ? lookup[districtName] : "none";
-        
-        let color, statusText, emoji;
-        
-        switch (status) {
-          case "completed":
-            color = "#ff4757"; // 赤色
-            statusText = "配布済み";
-            emoji = "✅";
-            break;
-          case "planned":
-            color = "#ffa502"; // 黄色（オレンジ寄り）
-            statusText = "配布予定";
-            emoji = "📋";
-            break;
-          case "none":
-          default:
-            color = "#a4b0be"; // 薄い青色
-            statusText = "未配布";
-            emoji = "❌";
-            break;
-        }
-        
-        l.setStyle({ fillColor: color });
-        l.myFillColor = color;
-        
-        if (districtName) {
-          l.setTooltipContent(`${municipalityName}<br><strong>${districtName}: ${emoji} ${statusText}</strong>`);
-        } else {
-          l.setTooltipContent(`${municipalityName}<br>選挙区データなし`);
-        }
-      });
-    }
-
-    /** 凡例 */
-    const legend = L.control({ position: "bottomright" });
-    legend.onAdd = () => {
-      const div = L.DomUtil.create("div", "legend");
-      div.id = "legendBox";
-      renderLegend(div);
-      return div;
-    };
-    legend.addTo(map);
-
-    function renderLegend(div) {
-      div.innerHTML = `
-        <strong>🗳️ 配布状況（選挙区別）</strong><br>
-        <i style="background:#ff4757"></i> ✅ 配布済み<br>
-        <i style="background:#ffa502"></i> 📋 配布予定<br>
-        <i style="background:#a4b0be"></i> ❌ 未配布<br>
-      `;
-    }
-  </script>
-</body>
-</html>
+/* ===== 6. 凡例 ===== */
+L.control({position:"bottomright"}).onAdd=_=>{
+  const d=document.createElement("div");d.className="legend";
+  d.innerHTML=`
+    <strong>🗳️ 配布状況</strong><br>
+    <i style="background:#ff4757"></i> ✅ 配布済み<br>
+    <i style="background:#ffa502"></i> 📋 配布予定<br>
+    <i style="background:#a4b0be"></i> ❌ 未配布<br>`;
+  return d;
+}.addTo(map);
+</script>
+</body></html>
