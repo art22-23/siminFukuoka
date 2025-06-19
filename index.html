@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<title>福岡県チラシ配布マップ</title>
+<title>安心安価で食べたいから政権もいただきます ─ 10万枚配布プロジェクト</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 
 <!-- Leaflet & TopoJSON -->
@@ -21,175 +21,133 @@
     font-family:"Comic Sans MS","Hiragino Kaku Gothic ProN","メイリオ",Meiryo,sans-serif;
     color:var(--fg);font-weight:600;}
   #map{height:100%;width:100%}
-  .title{position:absolute;top:10px;left:50%;transform:translateX(-50%);
-    background:var(--card);padding:14px 24px;border-radius:25px;
-    box-shadow:0 4px 15px rgba(255,107,107,.3);border:2px solid var(--border);
-    z-index:1000;font-size:1.25rem;font-weight:bold;color:var(--accent);
-    text-align:center;backdrop-filter:blur(10px);}
+
+  /* タイトル */
+  .title{
+    position:absolute;top:10px;left:50%;transform:translateX(-50%);
+    background:var(--card);padding:16px 30px;border-radius:30px;
+    box-shadow:0 6px 18px rgba(255,107,107,.35);border:3px solid var(--border);
+    z-index:1000;font-size:1.1rem;font-weight:bold;color:var(--accent);
+    text-align:center;line-height:1.4;backdrop-filter:blur(10px);
+  }
+
+  /* ポップアップ */
   .leaflet-popup-content{margin:6px 8px;font-size:.9rem;line-height:1.3;}
 
-  /* ▼ 合計枚数バッジ */
+  /* ▼ 合計枚数バッジ（タイトル直下で強調） */
   #total-counter{
-    position:absolute;bottom:15px;right:15px;
-    background:var(--card);color:var(--fg);
-    border:2px solid var(--border);border-radius:15px;
-    padding:10px 18px;font-size:1rem;font-weight:bold;
-    box-shadow:0 3px 10px rgba(255,107,107,.25);
-    backdrop-filter:blur(10px);z-index:1000;
+    position:absolute;top:78px;left:50%;transform:translateX(-50%);
+    background:var(--accent);color:#fff;
+    border-radius:20px;padding:10px 22px;font-size:1.05rem;font-weight:bold;
+    box-shadow:0 4px 15px rgba(255,107,107,.4);z-index:1000;
   }
 </style>
 </head>
 <body>
-  <div class="title">福岡県チラシ配布マップ</div>
-  <div id="map"></div>
-  <!-- 合計枚数を表示 -->
+  <div class="title">「安心安価で食べたいから 政権もいただきます」<br>チラシ10万枚配布プロジェクト</div>
   <div id="total-counter">📦 計算中…</div>
+  <div id="map"></div>
 
 <script>
 /* ------------------------------------------------------------
-   0) Leaflet ベースマップ
+   Leaflet ベースマップ
 ------------------------------------------------------------ */
 const map=L.map("map",{zoomSnap:0.25,inertia:true}).setView([33.58,130.58],9);
 L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
   {attribution:"&copy; OpenStreetMap contributors, &copy; CARTO"}).addTo(map);
 
 /* ------------------------------------------------------------
-   1) 市町村境界線（TopoJSON → GeoJSON）
+   市町村境界線レイヤー
 ------------------------------------------------------------ */
-const topoURL="https://geoshape.ex.nii.ac.jp/city/topojson/20230101/40/40_city_dc.l.topojson";
-fetch(topoURL).then(r=>r.json()).then(topo=>{
-  const key=Object.keys(topo.objects).find(k=>topo.objects[k].type==="GeometryCollection");
-  const geo=topojson.feature(topo, topo.objects[key]);
+fetch("https://geoshape.ex.nii.ac.jp/city/topojson/20230101/40/40_city_dc.l.topojson")
+  .then(r=>r.json()).then(topo=>{
+    const key=Object.keys(topo.objects).find(k=>topo.objects[k].type==="GeometryCollection");
+    const geo=topojson.feature(topo, topo.objects[key]);
 
-  const layer=L.geoJSON(geo,{
-    style:()=>({weight:2,color:"var(--accent)",fillOpacity:.15,fillColor:"#ffffff"}),
-    onEachFeature:(f,l)=>{
-      const n=f.properties.name||f.properties.N03_004||f.properties.N03_003;
-      l.bindTooltip(n,{sticky:true});
-      l.on({
-        mouseover:e=>e.target.setStyle({fillOpacity:.35}),
-        mouseout :e=>e.target.setStyle({fillOpacity:.15})
-      });
-    }
-  }).addTo(map);
+    const layer=L.geoJSON(geo,{
+      style:()=>({weight:2,color:"var(--accent)",fillOpacity:.15,fillColor:"#ffffff"}),
+      onEachFeature:(f,l)=>{
+        const name=f.properties.name||f.properties.N03_004||f.properties.N03_003;
+        l.bindTooltip(name,{sticky:true});
+        l.on({
+          mouseover:e=>e.target.setStyle({fillOpacity:.35}),
+          mouseout :e=>e.target.setStyle({fillOpacity:.15})
+        });
+      }
+    }).addTo(map);
 
-  const b=layer.getBounds();
-  map.fitBounds(b); map.setMaxBounds(b.pad(0.4));
-
-  plotPoints();               // 境界描画後にマーカー配置
+    map.fitBounds(layer.getBounds());
+    map.setMaxBounds(layer.getBounds().pad(0.4));
+    plotPoints();            // マーカー描画
 });
 
 /* ------------------------------------------------------------
-   2) 配布ポイント一覧（すべて枚数入り）
+   配布ポイント一覧（すべて枚数付き）
 ------------------------------------------------------------ */
-const pointsList = [
-  /* ── 博多区 ─────────────────── */
-  { place:"博多区 空港前･青木･東平尾",   count:2000, lat:33.595024, lng:130.455876 },
-  { place:"博多区 みどりが丘･青葉",      count:1000, lat:33.646233, lng:130.475250 },
-
-  /* ── 中央区 ─────────────────── */
-  { place:"中央区 友泉･梅光園",          count:1000, lat:33.575189, lng:130.376544 },
-  { place:"中央区 荒戸",                count:1000, lat:33.590379, lng:130.377177 },
-  { place:"中央区 薬院3･4丁目",          count: 900, lat:33.578236, lng:130.400067 },
-  { place:"中央区 警固2丁目",            count: 300, lat:33.583322, lng:130.393252 },
-
-  /* ── 南区 ─────────────────── */
-  { place:"南区 桧原団地",              count: 300, lat:33.534961, lng:130.399262 },
-  { place:"南区 長住団地と周辺",         count:1000, lat:33.550799, lng:130.394959 },
-  { place:"南区 柏原6丁目",             count: 700, lat:33.525753, lng:130.391919 },
-  { place:"南区 柏原3丁目",             count: 100, lat:33.525392, lng:130.403302 },
-  { place:"南区 各所",                  count:2000, lat:33.561589, lng:130.426554 },
-  { place:"南区 高宮〜野間",            count: 200, lat:33.563794, lng:130.416112 },
-  { place:"南区 大橋1丁目",             count: 400, lat:33.559078, lng:130.426091 },
-
-  /* ── 城南区・早良区 ──────────── */
-  { place:"城南区 茶山4丁目",           count: 200, lat:33.561478, lng:130.364663 },
-  { place:"城南区 茶山6丁目",           count: 200, lat:33.568966, lng:130.363160 },
-  { place:"城南区 金山団地",            count: 250, lat:33.557871, lng:130.367776 },
-  { place:"城南区 荒江団地",            count: 350, lat:33.572843, lng:130.359941 },
-  { place:"城南区 梅林",                count: 200, lat:33.545831, lng:130.354939 },
-  { place:"早良区 原団地",              count: 500, lat:33.570133, lng:130.340509 },
-
-  /* ── 太宰府市 ───────────────── */
-  { place:"太宰府市",                   count:1000, lat:33.512860, lng:130.523750 },
-
-  /* ── 久留米市 ───────────────── */
-  { place:"久留米市 城南町",            count: 100, lat:33.320600, lng:130.509900 },
-  { place:"久留米市 東合川",            count: 420, lat:33.326008, lng:130.550114 },
-  { place:"久留米市 西町",             count: 420, lat:33.295798, lng:130.518104 },
-  { place:"久留米市 南町",             count: 420, lat:33.291002, lng:130.526836 },
-  { place:"久留米市 津福",             count: 420, lat:33.291578, lng:130.497258 },
-  { place:"久留米市 大善寺",           count: 420, lat:33.268768, lng:130.481324 },
-  { place:"久留米市 安武",             count: 420, lat:33.286031, lng:130.488645 },
-  { place:"久留米市 青峰",             count: 420, lat:33.285175, lng:130.557931 },
-  { place:"久留米市 大石町",           count: 420, lat:33.315888, lng:130.497743 },
-
-  /* ── 南部３市 ───────────────── */
-  { place:"みやま市",                  count: 200, lat:33.150338, lng:130.468887 },
-  { place:"柳川市",                    count: 420, lat:33.162900, lng:130.405700 },
-  { place:"大牟田市",                count:4600, lat:33.030200, lng:130.445900 },
-
-  /* ── 直鞍・北九州 ─────────────── */
-  { place:"直鞍地域",                count:5000, lat:33.744100, lng:130.729700 },
-  { place:"北九州市",              count:10000, lat:33.883000, lng:130.875300 },
-
-  /* ── 各選挙区連合・市民の会 ─────── */
-  { place:"3区市民連合",           count: 5000, lat:33.553890, lng:130.197780 },
-  { place:"4区市民連合",           count:10000, lat:33.800000, lng:130.533330 },
-  { place:"5区の会",              count: 3000, lat:33.487500, lng:130.525830 },
-  { place:"9条の会(6区)",         count:  500, lat:33.316700, lng:130.516700 }
+const pointsList=[
+  {place:"博多区 空港前･青木･東平尾",count:2000,lat:33.595024,lng:130.455876},
+  {place:"博多区 みどりが丘･青葉",count:1000,lat:33.646233,lng:130.475250},
+  {place:"中央区 友泉･梅光園",count:1000,lat:33.575189,lng:130.376544},
+  {place:"中央区 荒戸",count:1000,lat:33.590379,lng:130.377177},
+  {place:"中央区 薬院3･4丁目",count:900,lat:33.578236,lng:130.400067},
+  {place:"中央区 警固2丁目",count:300,lat:33.583322,lng:130.393252},
+  {place:"南区 桧原団地",count:300,lat:33.534961,lng:130.399262},
+  {place:"南区 長住団地と周辺",count:1000,lat:33.550799,lng:130.394959},
+  {place:"南区 柏原6丁目",count:700,lat:33.525753,lng:130.391919},
+  {place:"南区 柏原3丁目",count:100,lat:33.525392,lng:130.403302},
+  {place:"南区 各所",count:2000,lat:33.561589,lng:130.426554},
+  {place:"南区 高宮〜野間",count:200,lat:33.563794,lng:130.416112},
+  {place:"南区 大橋1丁目",count:400,lat:33.559078,lng:130.426091},
+  {place:"城南区 茶山4丁目",count:200,lat:33.561478,lng:130.364663},
+  {place:"城南区 茶山6丁目",count:200,lat:33.568966,lng:130.363160},
+  {place:"城南区 金山団地",count:250,lat:33.557871,lng:130.367776},
+  {place:"城南区 荒江団地",count:350,lat:33.572843,lng:130.359941},
+  {place:"城南区 梅林",count:200,lat:33.545831,lng:130.354939},
+  {place:"早良区 原団地",count:500,lat:33.570133,lng:130.340509},
+  {place:"太宰府市",count:1000,lat:33.512860,lng:130.523750},
+  {place:"久留米市 城南町",count:100,lat:33.320600,lng:130.509900},
+  {place:"久留米市 東合川",count:420,lat:33.326008,lng:130.550114},
+  {place:"久留米市 西町",count:420,lat:33.295798,lng:130.518104},
+  {place:"久留米市 南町",count:420,lat:33.291002,lng:130.526836},
+  {place:"久留米市 津福",count:420,lat:33.291578,lng:130.497258},
+  {place:"久留米市 大善寺",count:420,lat:33.268768,lng:130.481324},
+  {place:"久留米市 安武",count:420,lat:33.286031,lng:130.488645},
+  {place:"久留米市 青峰",count:420,lat:33.285175,lng:130.557931},
+  {place:"久留米市 大石町",count:420,lat:33.315888,lng:130.497743},
+  {place:"みやま市",count:200,lat:33.150338,lng:130.468887},
+  {place:"柳川市",count:420,lat:33.162900,lng:130.405700},
+  {place:"大牟田市",count:4600,lat:33.030200,lng:130.445900},
+  {place:"直鞍地域",count:5000,lat:33.744100,lng:130.729700},
+  {place:"北九州市",count:10000,lat:33.883000,lng:130.875300},
+  {place:"3区市民連合",count:5000,lat:33.553890,lng:130.197780},
+  {place:"4区市民連合",count:10000,lat:33.800000,lng:130.533330},
+  {place:"5区の会",count:3000,lat:33.487500,lng:130.525830},
+  {place:"9条の会(6区)",count:500,lat:33.316700,lng:130.516700}
 ];
 
 /* ------------------------------------------------------------
-   3) 手動ジオコーディング用（今回は空）
+   ランダムカラー（パステル調 HSL）
 ------------------------------------------------------------ */
-const manualCoords={};
-
-/* ------------------------------------------------------------
-   4) ジオコーダ関数（座標空欄の地点だけ利用）
------------------------------------------------------------- */
-async function geocode(addr){
-  const key=`geo::${addr}`;
-  const cached=localStorage.getItem(key);
-  if(cached) return JSON.parse(cached);
-  if(manualCoords[addr]) return manualCoords[addr];
-
-  const url=`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent("福岡県 "+addr)}`;
-  const res=await fetch(url,{headers:{'Accept-Language':'ja'}});
-  const js=await res.json();
-  if(js[0]){
-    const ll=[+js[0].lat,+js[0].lon];
-    localStorage.setItem(key,JSON.stringify(ll));
-    await new Promise(r=>setTimeout(r,1000)); // rate-limit
-    return ll;
-  }
-  console.warn("Geocode 失敗:",addr);
-  return null;
+function randomColor(){
+  const h=Math.floor(Math.random()*360);        // 0-359
+  return `hsl(${h}deg 70% 55%)`;
 }
 
 /* ------------------------------------------------------------
-   5) マーカーを描画 & 合計枚数を表示
+   マーカー & 合計枚数
 ------------------------------------------------------------ */
-async function plotPoints(){
+function plotPoints(){
   let total=0;
-
-  for(const p of pointsList){
-    const ll=(typeof p.lat==="number"&&typeof p.lng==="number")
-             ? [p.lat,p.lng] : await geocode(p.place);
-    if(!ll) continue;
-
-    total += p.count || 0;
-
-    const marker=L.circleMarker(ll,{
-      radius:8,weight:2,
-      color:"#ff4757",fillColor:"#ff4757",fillOpacity:0.8
-    }).addTo(map);
-
-    const popupHTML=`<strong>${p.place}</strong><br>配布枚数：${p.count.toLocaleString()} 枚`;
-    marker.bindPopup(popupHTML,{closeButton:false});
-    marker.on("mouseover",()=>marker.openPopup());
-    marker.on("mouseout", ()=>marker.closePopup());
-  }
+  pointsList.forEach(p=>{
+    total+=p.count;
+    const color=randomColor();
+    L.circleMarker([p.lat,p.lng],{
+      radius:12,weight:2,color:color,fillColor:color,fillOpacity:0.85
+    }).addTo(map)
+     .bindPopup(`<strong>${p.place}</strong><br>配布枚数：${p.count.toLocaleString()} 枚`,{closeButton:false})
+     .on("mouseover",function(){this.openPopup()})
+     .on("mouseout",function(){this.closePopup()});
+  });
 
   document.getElementById("total-counter")
           .textContent=`📦 配布枚数：${total.toLocaleString()} 枚`;
