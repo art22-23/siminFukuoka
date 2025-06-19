@@ -69,18 +69,15 @@ fetch(topoURL).then(r=>r.json()).then(topo=>{
 
 /* ===== チラシ配布ポイント一覧 ===== */
 const pointsList = [
-  /* ── 博多区 ─────────────────── */
   { place:"博多区 空港前･青木･東平尾",     count:2000, lat:33.595024, lng:130.455876 }, //:contentReference[oaicite:0]{index=0}
   { place:"博多区 みどりが丘･青葉",        count:1000, lat:33.646233, lng:130.475250 }, //:contentReference[oaicite:1]{index=1}
   { place:"博多区 みどりが丘･青葉",                      lat:33.645880, lng:130.466559 }, // 青葉エリア補助点 :contentReference[oaicite:2]{index=2}
 
-  /* ── 中央区 ─────────────────── */
   { place:"中央区 友泉･梅光園",            count:1000, lat:33.575189, lng:130.376544 }, //:contentReference[oaicite:3]{index=3}
   { place:"中央区 荒戸",                  count:1000, lat:33.590379, lng:130.377177 }, //:contentReference[oaicite:4]{index=4}
   { place:"中央区 薬院3･4丁目",            count: 900, lat:33.578236, lng:130.400067 }, //:contentReference[oaicite:5]{index=5}
   { place:"中央区 警固2丁目",              count: 300, lat:33.583322, lng:130.393252 }, //:contentReference[oaicite:6]{index=6}
 
-  /* ── 南区 ─────────────────── */
   { place:"南区 桧原団地",                count: 300, lat:33.534961, lng:130.399262 }, //:contentReference[oaicite:7]{index=7}
   { place:"南区 長住団地と周辺",           count:1000, lat:33.550799, lng:130.394959 }, //:contentReference[oaicite:8]{index=8}
   { place:"南区 柏原6丁目",               count: 700, lat:33.525753, lng:130.391919 }, //:contentReference[oaicite:9]{index=9}
@@ -89,7 +86,6 @@ const pointsList = [
   { place:"南区 高宮〜野間",              count: 200, lat:33.563794, lng:130.416112 }, //:contentReference[oaicite:12]{index=12}
   { place:"南区 大橋1丁目",               count: 400, lat:33.559078, lng:130.426091 }, //:contentReference[oaicite:13]{index=13}
 
-  /* ── 城南区・早良区 ────────────── */
   { place:"城南区 茶山4丁目",             count: 200, lat:33.561478, lng:130.364663 }, //:contentReference[oaicite:14]{index=14}
   { place:"城南区 茶山6丁目",             count: 200, lat:33.568966, lng:130.363160 }, //:contentReference[oaicite:15]{index=15}
   { place:"城南区 金山団地",              count: 250, lat:33.557871, lng:130.367776 }, //:contentReference[oaicite:16]{index=16}
@@ -97,10 +93,8 @@ const pointsList = [
   { place:"城南区 梅林",                  count: 200, lat:33.545831, lng:130.354939 }, //:contentReference[oaicite:18]{index=18}
   { place:"早良区 原団地",                count: 500, lat:33.570133, lng:130.340509 }, //:contentReference[oaicite:19]{index=19}
 
-  /* ── 太宰府市 ───────────────── */
   { place:"太宰府市",                     count:1000, lat:33.51286, lng:130.52375 },  // 市役所付近 :contentReference[oaicite:20]{index=20}
 
-  /* ── 久留米市 ───────────────── */
   { place:"久留米市 城南町",              count: 100, lat:33.320600, lng:130.509900 }, // 先ほどご提供
   { place:"久留米市 東合川",                          lat:33.326008, lng:130.550114 }, //:contentReference[oaicite:21]{index=21}
   { place:"久留米市 西町",                            lat:33.295798, lng:130.518104 }, //:contentReference[oaicite:22]{index=22}
@@ -110,8 +104,6 @@ const pointsList = [
   { place:"久留米市 安武",                            lat:33.286031, lng:130.488645 }, //:contentReference[oaicite:26]{index=26}
   { place:"久留米市 青峰",                            lat:33.285175, lng:130.557931 }, //:contentReference[oaicite:27]{index=27}
   { place:"久留米市 大石町",                          lat:33.315888, lng:130.497743 }, //:contentReference[oaicite:28]{index=28}
-
-  /* ── 南部３市 ───────────────── */
   { place:"みやま市",                                lat:33.150338, lng:130.468887 }, //:contentReference[oaicite:29]{index=29}
   { place:"柳川市",                                  lat:33.162900, lng:130.405700 }, //:contentReference[oaicite:30]{index=30}
   { place:"大牟田市",                                lat:33.030200, lng:130.445900 }  //:contentReference[oaicite:31]{index=31}
