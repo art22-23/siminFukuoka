@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import html
 import json
 import re
@@ -12,9 +13,18 @@ ROOT = Path(__file__).resolve().parent
 EXCEL_PATH = ROOT / "2026福岡県議一覧.xlsx"
 TOPO_PATH = ROOT / "fukuoka_city_20230101.topojson"
 OUTPUT_PATH = ROOT / "fukuoka-kenmap.html"
+PHOTO_DATA_PATH = ROOT / "candidate_photos.json"
+TRAVEL_COST_IMAGE_PATH = ROOT / "nishinippon-article-20260709.jpeg"
 
 FULLWIDTH_DIGITS = str.maketrans("０１２３４５６７８９", "0123456789")
-BY_ELECTION_NAMES = {"佐藤かえで", "吉岡れい子", "うらただいじ", "吉松源明", "亀崎大介", "となり祥平"}
+BY_ELECTION_LABELS = {
+    "吉松源明": "2024年12月補選",
+    "亀崎大介": "2024年12月補選",
+    "佐藤かえで": "2025年3月補選",
+    "吉岡れい子": "2025年3月補選",
+    "となり祥平": "2025年3月補選",
+    "うらただいじ": "2025年6月補選",
+}
 
 
 def clean_cell(value: object) -> str:
@@ -36,11 +46,42 @@ def parse_travel_note(text: str) -> dict[str, object] | None:
     return {"raw": text}
 
 
-def parse_person_entry(text: str) -> dict[str, str]:
+def parse_person_entry(text: str) -> dict[str, object]:
     parts = text.rsplit(" ", 1)
     if len(parts) == 2:
-        return {"name": parts[0], "party": parts[1], "byElection": parts[0] in BY_ELECTION_NAMES}
-    return {"name": text, "party": "", "byElection": text in BY_ELECTION_NAMES}
+        name, party = parts
+        by_election_label = "" if "×" in party else BY_ELECTION_LABELS.get(name, "")
+        return {"name": name, "party": party, "byElection": bool(by_election_label), "byElectionLabel": by_election_label}
+    by_election_label = BY_ELECTION_LABELS.get(text, "")
+    return {"name": text, "party": "", "byElection": bool(by_election_label), "byElectionLabel": by_election_label}
+
+
+def load_candidate_photos() -> dict[str, dict[str, str]]:
+    if not PHOTO_DATA_PATH.exists():
+        return {}
+    data = json.loads(PHOTO_DATA_PATH.read_text(encoding="utf-8"))
+    photos = data.get("photos", data)
+    return photos if isinstance(photos, dict) else {}
+
+
+def attach_photo(entry: dict[str, object], photos: dict[str, dict[str, str]]) -> None:
+    photo = photos.get(str(entry.get("name", "")))
+    if not photo:
+        return
+    image_url = photo.get("imageUrl", "")
+    if not image_url:
+        return
+    entry["photoUrl"] = image_url
+    entry["profileUrl"] = photo.get("profileUrl", "")
+    entry["photoSource"] = photo.get("source", "選挙ドットコム")
+
+
+def image_data_uri(path: Path) -> str:
+    if not path.exists():
+        return ""
+    mime = "image/jpeg" if path.suffix.lower() in {".jpg", ".jpeg"} else "image/png"
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
 
 
 def topo_area_name(properties: dict[str, object]) -> str:
@@ -56,8 +97,9 @@ def load_area_names(topo: dict[str, object]) -> list[str]:
     return [topo_area_name(g["properties"]) for g in geometries]
 
 
-def parse_excel() -> list[dict[str, object]]:
+def parse_excel(candidate_photos: dict[str, dict[str, str]] | None = None) -> list[dict[str, object]]:
     df = pd.read_excel(EXCEL_PATH, header=None, dtype=object)
+    photos = candidate_photos or {}
     records: list[dict[str, object]] = []
     current: dict[str, object] | None = None
 
@@ -96,7 +138,9 @@ def parse_excel() -> list[dict[str, object]]:
                     entries.append({"kind": "travel", "text": value})
                 else:
                     person = parse_person_entry(value)
-                    entries.append({"kind": "person", "text": value, "name": person["name"], "party": person["party"], "byElection": person["byElection"]})
+                    entry = {"kind": "person", "text": value, "name": person["name"], "party": person["party"], "byElection": person["byElection"], "byElectionLabel": person["byElectionLabel"]}
+                    attach_photo(entry, photos)
+                    entries.append(entry)
             slots.append({"entries": entries})
 
         normalized.append(
@@ -158,11 +202,26 @@ def build_html(
     records: list[dict[str, object]],
     area_to_district: dict[str, str],
     header_note: str,
+    travel_cost_image_data_uri: str,
 ) -> str:
     topo_json = json_for_script(topo)
     records_json = json_for_script(records)
     area_map_json = json_for_script(area_to_district)
     header_note_html = html.escape(header_note)
+    travel_cost_section = ""
+    if travel_cost_image_data_uri:
+        travel_cost_section = f"""
+    <section class="expense-panel" aria-label="海外視察費総額一覧">
+      <div class="expense-head">
+        <h2>海外視察費総額一覧</h2>
+        <p>西日本新聞掲載の一覧画像</p>
+      </div>
+      <figure>
+        <img src="{html.escape(travel_cost_image_data_uri, quote=True)}" alt="福岡県議会の海外視察費総額一覧" loading="lazy">
+        <figcaption>開示資料に基づく海外視察費一覧</figcaption>
+      </figure>
+    </section>
+"""
 
     template = """<!doctype html>
 <html lang="ja">
@@ -259,7 +318,7 @@ def build_html(
       display: grid;
       grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.8fr);
       gap: 18px;
-      align-items: start;
+      align-items: stretch;
     }
 
     .map-panel,
@@ -391,6 +450,8 @@ def build_html(
       padding: 18px;
       position: sticky;
       top: 14px;
+      align-self: stretch;
+      min-height: 100%;
     }
 
     .detail h2 {
@@ -428,8 +489,8 @@ def build_html(
 
     .person-row {
       display: grid;
-      grid-template-columns: minmax(68px, auto) 1fr;
-      gap: 10px;
+      grid-template-columns: 90px 1fr;
+      gap: 12px;
       align-items: center;
       min-width: 0;
     }
@@ -439,6 +500,54 @@ def build_html(
       border-top: 1px solid var(--line);
       padding-top: 8px;
       margin-top: 8px;
+    }
+
+    .person-photo-link,
+    .person-photo-missing {
+      width: 88px;
+      height: 88px;
+      border-radius: 8px;
+    }
+
+    .person-photo-link {
+      display: block;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+    }
+
+    .person-photo {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .person-photo-missing {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      border: 1px dashed var(--line);
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+      text-align: center;
+    }
+
+    .person-main {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .person-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
     }
 
     .party {
@@ -455,13 +564,14 @@ def build_html(
 
     .person-name {
       min-width: 0;
+      font-weight: 500;
       word-break: keep-all;
       overflow-wrap: anywhere;
     }
     .by-election {
       display: inline-flex;
       align-items: center;
-      margin-left: 8px;
+      margin-left: 0;
       padding: 2px 7px;
       border-radius: 999px;
       border: 1px solid rgba(185, 79, 54, 0.34);
@@ -474,7 +584,7 @@ def build_html(
     }
 
     .travel {
-      margin: 5px 0 0 calc(68px + 10px);
+      margin: 8px 0 0 102px;
       color: var(--accent);
       font-weight: 500;
       line-height: 1.55;
@@ -484,6 +594,58 @@ def build_html(
       color: var(--muted);
       line-height: 1.6;
       font-size: 13px;
+    }
+
+    .expense-panel {
+      margin-top: 18px;
+      padding: 18px;
+      background: rgba(255,255,255,0.92);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .expense-head {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px 14px;
+      margin-bottom: 12px;
+    }
+
+    .expense-head h2 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+
+    .expense-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .expense-panel figure {
+      margin: 0;
+    }
+
+    .expense-panel img {
+      display: block;
+      width: min(100%, 920px);
+      height: auto;
+      margin: 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .expense-panel figcaption {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
     }
 
     footer {
@@ -507,9 +669,12 @@ def build_html(
       }
       .layout {
         grid-template-columns: 1fr;
+        align-items: start;
       }
       .detail {
         position: static;
+        min-height: 0;
+        align-self: auto;
       }
     }
 
@@ -519,8 +684,24 @@ def build_html(
         padding-top: 18px;
       }
       .map-panel,
-      .detail {
+      .detail,
+      .expense-panel {
         padding: 12px;
+      }
+      .person-row {
+        grid-template-columns: 64px 1fr;
+        gap: 10px;
+      }
+      .person-photo-link,
+      .person-photo-missing {
+        width: 60px;
+        height: 60px;
+      }
+      .person-photo-missing {
+        font-size: 10px;
+      }
+      .travel {
+        margin-left: 74px;
       }
       svg {
         aspect-ratio: 0.86 / 1;
@@ -566,9 +747,10 @@ def build_html(
 
       <aside class="detail" id="detail" aria-live="polite"></aside>
     </main>
+__TRAVEL_COST_SECTION__
 
     <footer>
-      議員データ: 2026福岡県議一覧.xlsx / 境界データ: <a href="https://geoshape.ex.nii.ac.jp/city/choropleth/40_city.html">Geoshape 市区町村TopoJSON 2023-01-01</a>（CODH作成）
+      議員データ: 2026福岡県議一覧.xlsx / 顔写真: <a href="https://go2senkyo.com/local/senkyo/23137">選挙ドットコム</a> / 境界データ: <a href="https://geoshape.ex.nii.ac.jp/city/choropleth/40_city.html">Geoshape 市区町村TopoJSON 2023-01-01</a>（CODH作成）
     </footer>
   </div>
 
@@ -762,9 +944,15 @@ def build_html(
             return `<div class="travel">${escapeHtml(entry.text)}</div>`;
           }
           const party = entry.party ? `<span class="party">${escapeHtml(entry.party)}</span>` : "";
-          const badge = entry.byElection ? `<span class="by-election">2024・2025年補選</span>` : "";
-          const name = escapeHtml(entry.name || entry.text);
-          return `<div class="person-row">${party}<span class="person-name">${name}${badge}</span></div>`;
+          const byElectionLabel = entry.byElectionLabel || (entry.byElection ? "補選" : "");
+          const badge = byElectionLabel ? `<span class="by-election">${escapeHtml(byElectionLabel)}</span>` : "";
+          const rawName = entry.name || entry.text;
+          const name = escapeHtml(rawName);
+          const photoAlt = `${escapeHtml(rawName)}の顔写真`;
+          const photo = entry.photoUrl
+            ? `<a class="person-photo-link" href="${escapeHtml(entry.profileUrl || entry.photoUrl)}" target="_blank" rel="noopener" aria-label="${name}のプロフィールを開く"><img class="person-photo" src="${escapeHtml(entry.photoUrl)}" alt="${photoAlt}" loading="lazy"></a>`
+            : `<div class="person-photo-missing" aria-label="${name}の顔写真は未掲載">写真<br>未掲載</div>`;
+          return `<div class="person-row">${photo}<div class="person-main"><div class="person-line">${party}<span class="person-name">${name}</span>${badge}</div></div></div>`;
         }).join("");
         return `<li class="member">${entries}</li>`;
       }).join("");
@@ -810,16 +998,19 @@ def build_html(
         .replace("__RECORDS_JSON__", records_json)
         .replace("__AREA_MAP_JSON__", area_map_json)
         .replace("__HEADER_NOTE__", header_note_html)
+        .replace("__TRAVEL_COST_SECTION__", travel_cost_section)
     )
 
 
 def main() -> None:
     topo = json.loads(TOPO_PATH.read_text(encoding="utf-8"))
     area_names = load_area_names(topo)
-    records = parse_excel()
+    candidate_photos = load_candidate_photos()
+    records = parse_excel(candidate_photos)
     header_note = load_header_note()
+    travel_cost_image = image_data_uri(TRAVEL_COST_IMAGE_PATH)
     area_to_district = attach_areas(records, area_names)
-    html = build_html(topo, records, area_to_district, header_note)
+    html = build_html(topo, records, area_to_district, header_note, travel_cost_image)
     OUTPUT_PATH.write_text(html, encoding="utf-8")
 
     unmapped_areas = sorted(set(area_names) - set(area_to_district))
