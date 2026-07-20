@@ -215,12 +215,33 @@
       width: 100%;
       height: auto;
       aspect-ratio: 1.18 / 1;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+    }
+
+    .map-wrap.is-grabbing svg {
+      cursor: grabbing;
+    }
+
+    .zoom-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: end;
+      justify-content: flex-end;
+    }
+
+    .zoom-controls button {
+      min-width: 42px;
+      padding-inline: 12px;
     }
 
     .area {
       stroke: rgba(31, 42, 39, 0.42);
       stroke-width: 0.72;
-      cursor: pointer;
+      cursor: grab;
+      vector-effect: non-scaling-stroke;
       transition: fill 160ms ease, stroke-width 160ms ease, opacity 160ms ease;
     }
 
@@ -255,6 +276,7 @@
       stroke-width: 1.35;
       opacity: 0.84;
       pointer-events: none;
+      vector-effect: non-scaling-stroke;
     }
 
     .uncontested-overlay.is-muted {
@@ -653,7 +675,11 @@
               <option value="">地図から選択</option>
             </select>
           </label>
-          <button type="button" id="reset-button">全体表示</button>
+          <div class="zoom-controls" aria-label="地図の操作">
+            <button type="button" id="zoom-out" aria-label="地図を縮小">−</button>
+            <button type="button" id="zoom-in" aria-label="地図を拡大">＋</button>
+            <button type="button" id="reset-button">全体表示</button>
+          </div>
         </div>
 
         <div class="map-legend" aria-label="地図の凡例">
@@ -665,16 +691,18 @@
         <div class="map-wrap" id="map-wrap">
           <svg id="map" role="img" aria-labelledby="map-title map-desc" viewBox="0 0 920 780">
             <title id="map-title">福岡県の市区町村・行政区別の県議会選挙区地図</title>
-            <desc id="map-desc">各区域に定数を表示し、一人区と2023年無投票選挙区を色と斜線で示します。選挙区を選ぶと右側に議員情報が表示されます。</desc>
+            <desc id="map-desc">各区域に定数を表示し、一人区と2023年無投票選挙区を色と斜線で示します。地図はドラッグやホイールで移動・拡大縮小できます。</desc>
             <defs>
               <pattern id="uncontested-hatch" patternUnits="userSpaceOnUse" width="8" height="8">
                 <path d="M-2,8 L8,-2 M0,10 L10,0" stroke="var(--map-uncontested-line)" stroke-width="1.8" opacity="0.62"></path>
               </pattern>
             </defs>
-            <g id="area-layer"></g>
-            <g id="uncontested-layer" class="uncontested-layer"></g>
-            <g id="seat-label-layer" class="seat-label-layer"></g>
-            <g id="label-layer" class="label-layer"></g>
+            <g id="map-content">
+              <g id="area-layer"></g>
+              <g id="uncontested-layer" class="uncontested-layer"></g>
+              <g id="seat-label-layer" class="seat-label-layer"></g>
+              <g id="label-layer" class="label-layer"></g>
+            </g>
           </svg>
           <div id="tooltip" class="tooltip" role="status"></div>
         </div>
@@ -700,6 +728,7 @@
 
     const byDistrict = new Map(districts.map((district) => [district.name, district]));
     const svg = d3.select("#map");
+    const mapContent = d3.select("#map-content");
     const areaLayer = d3.select("#area-layer");
     const labelLayer = d3.select("#label-layer");
     const uncontestedLayer = d3.select("#uncontested-layer");
@@ -707,6 +736,8 @@
     const tooltip = d3.select("#tooltip");
     const select = document.getElementById("district-select");
     const resetButton = document.getElementById("reset-button");
+    const zoomInButton = document.getElementById("zoom-in");
+    const zoomOutButton = document.getElementById("zoom-out");
     const detail = document.getElementById("detail");
 
     if (!window.d3 || !window.topojson) {
@@ -742,6 +773,16 @@
     });
 
     let selectedDistrict = "";
+    let currentTransform = d3.zoomIdentity;
+
+    const zoomBehavior = d3.zoom()
+      .scaleExtent([1, 7])
+      .on("start", () => d3.select("#map-wrap").classed("is-grabbing", true))
+      .on("zoom", (event) => {
+        currentTransform = event.transform;
+        mapContent.attr("transform", currentTransform);
+      })
+      .on("end", () => d3.select("#map-wrap").classed("is-grabbing", false));
 
     function seatNumber(text) {
       const normalized = String(text || "").replace(/[０-９]/g, (digit) => "０１２３４５６７８９".indexOf(digit));
@@ -784,6 +825,18 @@
       };
     }
 
+    function configureZoom(width, height) {
+      zoomBehavior
+        .extent([[0, 0], [width, height]])
+        .translateExtent([[-width * 0.75, -height * 0.75], [width * 1.75, height * 1.75]]);
+      svg.call(zoomBehavior);
+      mapContent.attr("transform", currentTransform);
+    }
+
+    function resetZoom() {
+      svg.transition().duration(180).call(zoomBehavior.transform, d3.zoomIdentity);
+    }
+
     function tooltipLines(feature) {
       const record = recordFor(feature);
       const lines = [`<strong>${escapeHtml(feature.properties.areaName)}</strong>`];
@@ -805,6 +858,7 @@
     function renderMap() {
       const { width, height, padding } = mapSize();
       svg.attr("viewBox", `0 0 ${width} ${height}`);
+      configureZoom(width, height);
 
       const projection = d3.geoMercator().fitExtent([[padding, padding], [width - padding, height - padding]], {
         type: "FeatureCollection",
@@ -1024,7 +1078,12 @@
       });
 
       select.addEventListener("change", (event) => selectDistrict(event.target.value));
-      resetButton.addEventListener("click", () => selectDistrict(""));
+      zoomInButton.addEventListener("click", () => svg.transition().duration(160).call(zoomBehavior.scaleBy, 1.35));
+      zoomOutButton.addEventListener("click", () => svg.transition().duration(160).call(zoomBehavior.scaleBy, 0.74));
+      resetButton.addEventListener("click", () => {
+        selectDistrict("");
+        resetZoom();
+      });
     }
 
     function renderSummary() {
