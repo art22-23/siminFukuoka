@@ -26,6 +26,23 @@ BY_ELECTION_LABELS = {
     "うらただいじ": "2025年6月補選",
 }
 
+UNCONTESTED_2023_DISTRICTS = {
+    "大牟田市",
+    "飯塚市・嘉穂郡",
+    "田川市",
+    "大川市・三潴郡",
+    "大野城市",
+    "福津市",
+    "宮若市・鞍手郡",
+    "嘉麻市",
+    "朝倉市・朝倉郡",
+    "みやま市",
+    "那珂川市",
+    "糟屋郡",
+    "田川郡",
+    "築上郡・豊前市",
+}
+
 
 def clean_cell(value: object) -> str:
     if pd.isna(value):
@@ -33,6 +50,12 @@ def clean_cell(value: object) -> str:
     text = str(value).strip()
     text = text.replace("\u3000", " ")
     return re.sub(r"\s+", " ", text)
+
+
+def seat_number(text: object) -> int:
+    normalized = str(text or "").translate(FULLWIDTH_DIGITS)
+    match = re.search(r"\d+", normalized)
+    return int(match.group(0)) if match else 0
 
 
 def is_travel_note(text: str) -> bool:
@@ -126,6 +149,7 @@ def parse_excel(candidate_photos: dict[str, dict[str, str]] | None = None) -> li
     normalized: list[dict[str, object]] = []
     for record in records:
         slots = []
+        seat_count = seat_number(record["seats"])
 
         for values in record["columns"]:
             if not values:
@@ -147,6 +171,9 @@ def parse_excel(candidate_photos: dict[str, dict[str, str]] | None = None) -> li
             {
                 "name": record["name"],
                 "seats": record["seats"],
+                "seatNumber": seat_count,
+                "singleMember": seat_count == 1,
+                "uncontested2023": record["name"] in UNCONTESTED_2023_DISTRICTS,
                 "slots": slots,
             }
         )
@@ -214,11 +241,11 @@ def build_html(
     <section class="expense-panel" aria-label="海外視察費総額一覧">
       <div class="expense-head">
         <h2>海外視察費総額一覧</h2>
-        <p>西日本新聞掲載の一覧画像</p>
+        <p>海外渡航費の出典: <a href="https://www.nishinippon.co.jp/item/1512796/">西日本新聞meの記事</a></p>
       </div>
       <figure>
         <img src="{html.escape(travel_cost_image_data_uri, quote=True)}" alt="福岡県議会の海外視察費総額一覧" loading="lazy">
-        <figcaption>開示資料に基づく海外視察費一覧</figcaption>
+        <figcaption>海外渡航費の記載は、西日本新聞me「【渡航した全議員の一覧】福岡県議会の公費海外視察　活動内容と旅費」を元にしています。</figcaption>
       </figure>
     </section>
 """
@@ -241,6 +268,11 @@ def build_html(
       --strong: #214d46;
       --accent: #b94f36;
       --map-empty: #e4e9e7;
+      --map-multi: #d4ece5;
+      --map-single: #f2ce7a;
+      --map-single-strong: #a45f17;
+      --map-uncontested-line: #b94f36;
+      --map-uncontested-soft: rgba(185, 79, 54, 0.16);
       --map-low: #d4ece5;
       --map-mid: #8fd0c2;
       --map-high: #efba6b;
@@ -262,7 +294,7 @@ def build_html(
     }
 
     .app {
-      width: min(1240px, calc(100% - 32px));
+      width: min(1540px, calc(100% - 32px));
       margin: 0 auto;
       padding: 28px 0 24px;
     }
@@ -316,7 +348,7 @@ def build_html(
 
     .layout {
       display: grid;
-      grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.8fr);
+      grid-template-columns: minmax(0, 2.25fr) minmax(340px, 0.65fr);
       gap: 18px;
       align-items: stretch;
     }
@@ -341,6 +373,44 @@ def build_html(
       justify-content: space-between;
       gap: 12px;
       margin-bottom: 10px;
+    }
+
+    .map-legend {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 14px;
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .map-legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .legend-swatch {
+      width: 18px;
+      height: 14px;
+      border-radius: 4px;
+      border: 1px solid rgba(31, 42, 39, 0.36);
+      background: var(--map-multi);
+      flex: 0 0 auto;
+    }
+
+    .legend-swatch.single {
+      background: var(--map-single);
+      border-color: var(--map-single-strong);
+    }
+
+    .legend-swatch.uncontested {
+      background:
+        repeating-linear-gradient(135deg, transparent 0 4px, rgba(185, 79, 54, 0.58) 4px 6px),
+        var(--map-multi);
+      border-color: var(--map-uncontested-line);
     }
 
     label {
@@ -412,13 +482,79 @@ def build_html(
     }
 
     .area.is-muted {
-      opacity: 0.42;
+      opacity: 0.55;
+    }
+
+    .area.is-uncontested {
+      stroke: var(--map-uncontested-line);
+      stroke-width: 1.12;
     }
 
     .area.is-selected {
       stroke: var(--strong);
       stroke-width: 2.25;
       opacity: 1;
+    }
+
+    .uncontested-layer,
+    .seat-label-layer {
+      pointer-events: none;
+    }
+
+    .uncontested-overlay {
+      fill: url(#uncontested-hatch);
+      stroke: var(--map-uncontested-line);
+      stroke-width: 1.35;
+      opacity: 0.84;
+      pointer-events: none;
+    }
+
+    .uncontested-overlay.is-muted {
+      opacity: 0.28;
+    }
+
+    .uncontested-overlay.is-selected {
+      opacity: 0.96;
+      stroke-width: 2;
+    }
+
+    .seat-label {
+      pointer-events: none;
+    }
+
+    .seat-label circle {
+      fill: rgba(255,255,255,0.94);
+      stroke: rgba(31, 42, 39, 0.42);
+      stroke-width: 1.1;
+    }
+
+    .seat-label.is-single circle {
+      fill: var(--map-single);
+      stroke: var(--map-single-strong);
+      stroke-width: 1.45;
+    }
+
+    .seat-label.is-uncontested circle {
+      stroke: var(--map-uncontested-line);
+      stroke-width: 1.8;
+    }
+
+    .seat-label.is-muted {
+      opacity: 0.56;
+    }
+
+    .seat-label.is-selected {
+      opacity: 1;
+    }
+
+    .seat-label text {
+      font-size: 12px;
+      font-weight: 500;
+      text-anchor: middle;
+      paint-order: stroke;
+      stroke: rgba(255,255,255,0.82);
+      stroke-width: 2px;
+      fill: var(--text);
     }
 
     .label-layer text {
@@ -467,9 +603,32 @@ def build_html(
       line-height: 1.65;
     }
     .seat-line {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
       margin: 0 0 12px;
       color: var(--muted);
       font-weight: 500;
+    }
+
+    .district-flag {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid rgba(164, 95, 23, 0.36);
+      background: rgba(242, 206, 122, 0.34);
+      color: var(--strong);
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .district-flag.uncontested {
+      border-color: rgba(185, 79, 54, 0.38);
+      background: var(--map-uncontested-soft);
+      color: var(--accent);
     }
 
     .member-list {
@@ -597,7 +756,7 @@ def build_html(
     }
 
     .expense-panel {
-      margin-top: 18px;
+      margin: 18px 0;
       padding: 18px;
       background: rgba(255,255,255,0.92);
       border: 1px solid var(--line);
@@ -680,7 +839,7 @@ def build_html(
 
     @media (max-width: 560px) {
       .app {
-        width: min(100% - 20px, 1240px);
+        width: min(100% - 20px, 1540px);
         padding-top: 18px;
       }
       .map-panel,
@@ -718,9 +877,13 @@ def build_html(
       <div class="summary" aria-label="データ概要">
         <span><strong id="district-count">0</strong>選挙区</span>
         <span><strong id="seat-count">0</strong>定数</span>
+        <span><strong id="single-member-count">0</strong>一人区</span>
+        <span><strong id="uncontested-count">0</strong>2023年無投票</span>
         <span class="note">__HEADER_NOTE__</span>
       </div>
     </header>
+
+__TRAVEL_COST_SECTION__
 
     <main class="layout">
       <section class="map-panel" aria-label="福岡県内の選挙区地図">
@@ -734,11 +897,24 @@ def build_html(
           <button type="button" id="reset-button">全体表示</button>
         </div>
 
+        <div class="map-legend" aria-label="地図の凡例">
+          <span><i class="legend-swatch single" aria-hidden="true"></i>定数1（一人区）</span>
+          <span><i class="legend-swatch multi" aria-hidden="true"></i>定数2以上</span>
+          <span><i class="legend-swatch uncontested" aria-hidden="true"></i>2023年無投票</span>
+        </div>
+
         <div class="map-wrap" id="map-wrap">
           <svg id="map" role="img" aria-labelledby="map-title map-desc" viewBox="0 0 920 780">
             <title id="map-title">福岡県の市区町村・行政区別の県議会選挙区地図</title>
-            <desc id="map-desc">各区域をクリックすると、右側に対応する選挙区の議員情報が表示されます。</desc>
+            <desc id="map-desc">各区域に定数を表示し、一人区と2023年無投票選挙区を色と斜線で示します。選挙区を選ぶと右側に議員情報が表示されます。</desc>
+            <defs>
+              <pattern id="uncontested-hatch" patternUnits="userSpaceOnUse" width="8" height="8">
+                <path d="M-2,8 L8,-2 M0,10 L10,0" stroke="var(--map-uncontested-line)" stroke-width="1.8" opacity="0.62"></path>
+              </pattern>
+            </defs>
             <g id="area-layer"></g>
+            <g id="uncontested-layer" class="uncontested-layer"></g>
+            <g id="seat-label-layer" class="seat-label-layer"></g>
             <g id="label-layer" class="label-layer"></g>
           </svg>
           <div id="tooltip" class="tooltip" role="status"></div>
@@ -747,10 +923,9 @@ def build_html(
 
       <aside class="detail" id="detail" aria-live="polite"></aside>
     </main>
-__TRAVEL_COST_SECTION__
 
     <footer>
-      議員データ: 2026福岡県議一覧.xlsx / 顔写真: <a href="https://go2senkyo.com/local/senkyo/23137">選挙ドットコム</a> / 境界データ: <a href="https://geoshape.ex.nii.ac.jp/city/choropleth/40_city.html">Geoshape 市区町村TopoJSON 2023-01-01</a>（CODH作成）
+      議員データ: 2026福岡県議一覧.xlsx / 顔写真: <a href="https://go2senkyo.com/local/senkyo/23137">選挙ドットコム</a> / 境界データ: <a href="https://geoshape.ex.nii.ac.jp/city/choropleth/40_city.html">Geoshape 市区町村TopoJSON 2023-01-01</a>（ODbL） / 2023年無投票: <a href="https://www.pref.fukuoka.lg.jp/contents/r5kengisenkyo.html">福岡県選挙管理委員会「令和5年4月9日執行 福岡県議会議員一般選挙」</a>
     </footer>
   </div>
 
@@ -768,6 +943,8 @@ __TRAVEL_COST_SECTION__
     const svg = d3.select("#map");
     const areaLayer = d3.select("#area-layer");
     const labelLayer = d3.select("#label-layer");
+    const uncontestedLayer = d3.select("#uncontested-layer");
+    const seatLabelLayer = d3.select("#seat-label-layer");
     const tooltip = d3.select("#tooltip");
     const select = document.getElementById("district-select");
     const resetButton = document.getElementById("reset-button");
@@ -795,8 +972,17 @@ __TRAVEL_COST_SECTION__
       };
     });
 
+    const featuresByDistrict = new Map();
+    features.forEach((feature) => {
+      const name = feature.properties.districtName;
+      if (!name) return;
+      if (!featuresByDistrict.has(name)) {
+        featuresByDistrict.set(name, []);
+      }
+      featuresByDistrict.get(name).push(feature);
+    });
 
-    let selectedDistrict = "福岡市東区";
+    let selectedDistrict = "";
 
     function seatNumber(text) {
       const normalized = String(text || "").replace(/[０-９]/g, (digit) => "０１２３４５６７８９".indexOf(digit));
@@ -813,17 +999,55 @@ __TRAVEL_COST_SECTION__
         .replace(/'/g, "&#39;");
     }
 
+    function recordFor(feature) {
+      return byDistrict.get(feature.properties.districtName);
+    }
+
+    function districtSeatNumber(record) {
+      return Number(record?.seatNumber || seatNumber(record?.seats));
+    }
+
+    function isSingleMember(record) {
+      return districtSeatNumber(record) === 1;
+    }
+
     function fillFor(feature) {
-      const record = byDistrict.get(feature.properties.districtName);
-      return record ? "var(--map-low)" : "var(--map-empty)";
+      const record = recordFor(feature);
+      if (!record) return "var(--map-empty)";
+      return isSingleMember(record) ? "var(--map-single)" : "var(--map-multi)";
+    }
+
+    function mapSize() {
+      return {
+        width: 980,
+        height: window.matchMedia("(max-width: 560px)").matches ? 1120 : 820,
+        padding: 10,
+      };
+    }
+
+    function tooltipLines(feature) {
+      const record = recordFor(feature);
+      const lines = [`<strong>${escapeHtml(feature.properties.areaName)}</strong>`];
+      if (!record) {
+        lines.push("表示データなし");
+        return lines;
+      }
+      const seats = districtSeatNumber(record);
+      lines.push(escapeHtml(record.name));
+      if (seats) {
+        lines.push(`定数 ${seats}${seats === 1 ? "（一人区）" : ""}`);
+      }
+      if (record.uncontested2023) {
+        lines.push("2023年無投票");
+      }
+      return lines;
     }
 
     function renderMap() {
-      const width = 920;
-      const height = window.matchMedia("(max-width: 560px)").matches ? 1060 : 780;
+      const { width, height, padding } = mapSize();
       svg.attr("viewBox", `0 0 ${width} ${height}`);
 
-      const projection = d3.geoMercator().fitExtent([[18, 18], [width - 18, height - 18]], {
+      const projection = d3.geoMercator().fitExtent([[padding, padding], [width - padding, height - padding]], {
         type: "FeatureCollection",
         features,
       });
@@ -836,16 +1060,11 @@ __TRAVEL_COST_SECTION__
         .attr("d", path)
         .attr("fill", fillFor)
         .on("mousemove", (event, feature) => {
-          const record = byDistrict.get(feature.properties.districtName);
-          const lines = [
-            `<strong>${escapeHtml(feature.properties.areaName)}</strong>`,
-            record ? escapeHtml(record.name) : "表データなし",
-          ];
           tooltip
             .style("display", "block")
             .style("left", `${event.offsetX + 12}px`)
             .style("top", `${event.offsetY + 12}px`)
-            .html(lines.join("<br>"));
+            .html(tooltipLines(feature).join("<br>"));
         })
         .on("mouseleave", () => tooltip.style("display", "none"))
         .on("click", (_, feature) => {
@@ -859,11 +1078,21 @@ __TRAVEL_COST_SECTION__
           }
         });
 
+      uncontestedLayer.selectAll("path")
+        .data(features.filter((feature) => recordFor(feature)?.uncontested2023), (feature) => feature.properties.N03_007 || feature.properties.areaName)
+        .join("path")
+        .attr("class", (feature) => overlayClass(feature))
+        .attr("d", path);
+
+      drawSeatLabels(path);
       drawSelectedLabels(path);
     }
 
     function areaClass(feature) {
+      const record = recordFor(feature);
       const classes = ["area"];
+      if (isSingleMember(record)) classes.push("is-single-member");
+      if (record?.uncontested2023) classes.push("is-uncontested");
       if (selectedDistrict) {
         if (feature.properties.districtName === selectedDistrict) {
           classes.push("is-selected");
@@ -872,6 +1101,63 @@ __TRAVEL_COST_SECTION__
         }
       }
       return classes.join(" ");
+    }
+
+    function overlayClass(feature) {
+      const classes = ["uncontested-overlay"];
+      if (selectedDistrict) {
+        if (feature.properties.districtName === selectedDistrict) {
+          classes.push("is-selected");
+        } else {
+          classes.push("is-muted");
+        }
+      }
+      return classes.join(" ");
+    }
+
+    function seatLabelClass(datum) {
+      const classes = ["seat-label"];
+      if (datum.seatCount === 1) classes.push("is-single");
+      if (datum.record.uncontested2023) classes.push("is-uncontested");
+      if (selectedDistrict) {
+        if (datum.record.name === selectedDistrict) {
+          classes.push("is-selected");
+        } else {
+          classes.push("is-muted");
+        }
+      }
+      return classes.join(" ");
+    }
+
+    function drawSeatLabels(path) {
+      const groups = districts.map((record) => {
+        const districtFeatures = featuresByDistrict.get(record.name) || [];
+        if (!districtFeatures.length) return null;
+        const collection = { type: "FeatureCollection", features: districtFeatures };
+        const [x, y] = path.centroid(collection);
+        const seatCount = districtSeatNumber(record);
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !seatCount) return null;
+        return { record, x, y, seatCount };
+      }).filter(Boolean);
+
+      const labels = seatLabelLayer.selectAll("g")
+        .data(groups, (datum) => datum.record.name)
+        .join((enter) => {
+          const group = enter.append("g");
+          group.append("circle");
+          group.append("text").attr("dy", "0.35em");
+          return group;
+        });
+
+      labels
+        .attr("class", seatLabelClass)
+        .attr("transform", (datum) => `translate(${datum.x},${datum.y})`);
+
+      labels.select("circle")
+        .attr("r", (datum) => datum.seatCount >= 4 ? 15 : 13);
+
+      labels.select("text")
+        .text((datum) => datum.seatCount);
     }
 
     function drawSelectedLabels(path) {
@@ -898,15 +1184,15 @@ __TRAVEL_COST_SECTION__
 
     function updateSelection() {
       areaLayer.selectAll("path").attr("class", (feature) => areaClass(feature));
-      const width = 920;
-      const height = window.matchMedia("(max-width: 560px)").matches ? 1060 : 780;
-      const projection = d3.geoMercator().fitExtent([[18, 18], [width - 18, height - 18]], {
+      uncontestedLayer.selectAll("path").attr("class", (feature) => overlayClass(feature));
+      seatLabelLayer.selectAll("g").attr("class", seatLabelClass);
+      const { width, height, padding } = mapSize();
+      const projection = d3.geoMercator().fitExtent([[padding, padding], [width - padding, height - padding]], {
         type: "FeatureCollection",
         features,
       });
       drawSelectedLabels(d3.geoPath(projection));
     }
-
     function selectDistrict(name) {
       selectedDistrict = name || "";
       select.value = selectedDistrict;
@@ -921,7 +1207,7 @@ __TRAVEL_COST_SECTION__
     function renderIntro() {
       detail.innerHTML = `
         <h2>選挙区を選択</h2>
-        <p class="sub">地図上の区域をクリックすると、該当する選挙区の議員情報がここに表示されます。</p>
+        <p class="sub">定数1（一人区）と2023年無投票選挙区が地図上で確認できます。</p>
       `;
     }
 
@@ -937,6 +1223,11 @@ __TRAVEL_COST_SECTION__
         renderIntro();
         return;
       }
+
+      const districtFlags = [
+        districtSeatNumber(record) === 1 ? `<span class="district-flag">一人区</span>` : "",
+        record.uncontested2023 ? `<span class="district-flag uncontested">2023年無投票</span>` : "",
+      ].filter(Boolean).join("");
 
       const members = record.slots.map((slot) => {
         const entries = slot.entries.map((entry) => {
@@ -960,7 +1251,7 @@ __TRAVEL_COST_SECTION__
       detail.innerHTML = `
         <h2>${escapeHtml(record.name)}</h2>
         <p class="sub">${escapeHtml(record.areas.join("、"))}</p>
-        <p class="seat-line">定数 ${escapeHtml(record.seats || "-")}</p>
+        <p class="seat-line"><span>定数 ${escapeHtml(record.seats || "-")}</span>${districtFlags}</p>
         <ul class="member-list">${members}</ul>
       `;
     }
@@ -978,9 +1269,13 @@ __TRAVEL_COST_SECTION__
     }
 
     function renderSummary() {
-      const seats = districts.reduce((sum, district) => sum + seatNumber(district.seats), 0);
+      const seats = districts.reduce((sum, district) => sum + districtSeatNumber(district), 0);
+      const singleMembers = districts.filter((district) => districtSeatNumber(district) === 1).length;
+      const uncontested = districts.filter((district) => district.uncontested2023).length;
       document.getElementById("district-count").textContent = districts.length.toLocaleString("ja-JP");
       document.getElementById("seat-count").textContent = seats.toLocaleString("ja-JP");
+      document.getElementById("single-member-count").textContent = singleMembers.toLocaleString("ja-JP");
+      document.getElementById("uncontested-count").textContent = uncontested.toLocaleString("ja-JP");
     }
 
     populateControls();
